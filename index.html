@@ -27,10 +27,6 @@
                         <p id="tempDisplay" class="text-2xl font-bold text-yellow-400">-- °C</p>
                     </div>
                     <div class="p-3 bg-gray-700 rounded-lg">
-                        <p class="text-gray-400 text-xs">HUMIDITY</p>
-                        <p id="humDisplay" class="text-2xl font-bold text-blue-400">-- %</p>
-                    </div>
-                    <div class="p-3 bg-gray-700 rounded-lg">
                         <p class="text-gray-400 text-xs">GAS LEVEL</p>
                         <p id="gasDisplay" class="text-2xl font-bold text-green-400">--</p>
                     </div>
@@ -141,7 +137,6 @@
             if (!data || data.length === 0) return;
             const latest = data[0];
             document.getElementById('tempDisplay').innerText = latest.temperature.toFixed(1) + "°C";
-            document.getElementById('humDisplay').innerText = latest.humidity.toFixed(0) + "%";
             document.getElementById('gasDisplay').innerText = latest.gas_value;
             const fireSafe = !latest.fire_detected; 
             const fireEl = document.getElementById('fireDisplay');
