@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Safety System - Cloud Dashboard</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto space-y-6">
+
+        <header class="text-center">
+            <h1 class="text-4xl font-bold text-blue-400">Internet of Things</h1>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div class="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700">
+                <h2 class="text-xl font-semibold mb-4 text-blue-300">Live Monitor</h2>
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    <div class="p-3 bg-gray-700 rounded-lg">
+                        <p class="text-gray-400 text-xs">TEMPERATURE</p>
+                        <p id="tempDisplay" class="text-2xl font-bold text-yellow-400">-- °C</p>
+                    </div>
+                    <div class="p-3 bg-gray-700 rounded-lg">
+                        <p class="text-gray-400 text-xs">HUMIDITY</p>
+                        <p id="humDisplay" class="text-2xl font-bold text-blue-400">-- %</p>
+                    </div>
+                    <div class="p-3 bg-gray-700 rounded-lg">
+                        <p class="text-gray-400 text-xs">GAS LEVEL</p>
+                        <p id="gasDisplay" class="text-2xl font-bold text-green-400">--</p>
+                    </div>
+                    <div class="p-3 bg-gray-700 rounded-lg">
+                        <p class="text-gray-400 text-xs">FIRE STATUS</p>
+                        <p id="fireDisplay" class="text-2xl font-bold text-gray-400">--</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700">
+                <h2 class="text-xl font-semibold mb-4 text-purple-300">Data Analysis</h2>
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-sm text-gray-400">Safety Index Score</span>
+                            <span id="safetyScoreText" class="text-sm font-bold text-green-400">100%</span>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-2.5">
+                            <div id="safetyBar" class="bg-green-500 h-2.5 rounded-full" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="bg-gray-700 p-2 rounded">
+                            <span class="block text-gray-500 text-xs">AVG TEMP (Last 20)</span>
+                            <span id="avgTemp" class="font-mono text-white">--</span>
+                        </div>
+                        <div class="bg-gray-700 p-2 rounded">
+                            <span class="block text-gray-500 text-xs">PEAK GAS (Last 20)</span>
+                            <span id="peakGas" class="font-mono text-white">--</span>
+                        </div>
+                    </div>
+
+                    <div class="p-2 bg-gray-700 rounded text-center">
+                        <span class="text-xs text-gray-500 block">SYSTEM STATUS</span>
+                        <span id="systemStatus" class="font-bold text-green-400 tracking-wider">NORMAL</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700">
+            <h2 class="text-xl font-semibold mb-4 text-pink-300">Historical Trends</h2>
+            <div class="relative h-64 w-full">
+                <canvas id="sensorChart"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-orange-300">Cloud Control</h2>
+                <div>
+                    <button id="btnAuto" onclick="setMode(true)" class="px-3 py-1 text-sm bg-green-600 rounded mr-2">Auto</button>
+                    <button id="btnManual" onclick="setMode(false)" class="px-3 py-1 text-sm bg-gray-600 rounded">Manual</button>
+                </div>
+            </div>
+
+            <div id="manualControls" class="opacity-50 pointer-events-none transition-all duration-300 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="text-xs text-gray-400">Window Opening Angle</label>
+                    <input type="range" min="0" max="180" value="0" id="sliderWindow" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer mt-2">
+                    <div class="text-right text-xs mt-1"><span id="angleVal">0</span>°</div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="toggleFan()" id="btnFan" class="flex-1 bg-blue-700 rounded hover:bg-blue-600 text-sm font-bold transition">Toggle Fan</button>
+                    <button onclick="toggleBuzzer()" id="btnBuzzer" class="flex-1 bg-red-700 rounded hover:bg-red-600 text-sm font-bold transition">Toggle Buzzer</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://kidvizqwlnnulzqanneh.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_2loXH35D_-6xdIxQkoXjsw__CM3eVOm';
+
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let chartInstance = null;
+        let lastSpeakTime = 0; 
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Temperature (°C)', borderColor: '#FACC15', data: [] },
+                    { label: 'Gas Level', borderColor: '#4ADE80', data: [], yAxisID: 'y1' } 
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { position: 'left', ticks: { color: '#ccc'} },
+                    y1: { position: 'right', ticks: { color: '#ccc'}, grid: { drawOnChartArea: false } },
+                    x: { ticks: { display: false } } 
+                }
+            }
+        });
+        async function fetchAndAnalyze() {
+            const { data, error } = await supabase
+                .from('sensor_readings')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(20);
+
+            if (!data || data.length === 0) return;
+            const latest = data[0];
+            document.getElementById('tempDisplay').innerText = latest.temperature.toFixed(1) + "°C";
+            document.getElementById('humDisplay').innerText = latest.humidity.toFixed(0) + "%";
+            document.getElementById('gasDisplay').innerText = latest.gas_value;
+            const fireSafe = !latest.fire_detected; 
+            const fireEl = document.getElementById('fireDisplay');
+            if (!fireSafe) {
+                fireEl.innerText = "DETECTED!";
+                fireEl.classList.replace('text-gray-400', 'text-red-600');
+                speakAlert("Critical Warning! Fire Detected!");
+            } else {
+                fireEl.innerText = "SAFE";
+                fireEl.classList.replace('text-red-600', 'text-gray-400');
+            }
+            let totalTemp = 0;
+            let maxGas = 0;
+            data.forEach(d => {
+                totalTemp += d.temperature;
+                if(d.gas_value > maxGas) maxGas = d.gas_value;
+            });
+            const avgTemp = (totalTemp / data.length).toFixed(1);
+            document.getElementById('avgTemp').innerText = avgTemp + "°C";
+            document.getElementById('peakGas').innerText = maxGas;
+            let safety = 100;
+            if (latest.temperature > 30) safety -= 20;
+            if (latest.gas_value > 1000) safety -= 30;
+            if (!fireSafe) safety = 0;
+            const bar = document.getElementById('safetyBar');
+            document.getElementById('safetyScoreText').innerText = safety + "%";
+            bar.style.width = safety + "%";
+            bar.className = `h-2.5 rounded-full transition-all duration-500 ${
+                safety > 80 ? 'bg-green-500' :
+                safety > 40 ? 'bg-yellow-500' : 'bg-red-600'
+            }`;
+
+            const statusText = document.getElementById('systemStatus');
+            if (safety === 100) { statusText.innerText = "OPTIMAL"; statusText.className = "font-bold text-green-400 tracking-wider"; }
+            else if (safety > 40) { statusText.innerText = "WARNING"; statusText.className = "font-bold text-yellow-400 tracking-wider"; }
+            else { statusText.innerText = "CRITICAL"; statusText.className = "font-bold text-red-500 tracking-wider blink"; }
+            const chartData = [...data].reverse();
+            chartInstance.data.labels = chartData.map(d => d.created_at);
+            chartInstance.data.datasets[0].data = chartData.map(d => d.temperature);
+            chartInstance.data.datasets[1].data = chartData.map(d => d.gas_value);
+            chartInstance.update();
+        }
+        let currentState = { is_auto_mode: true, fan_on: false, buzzer_on: false, window_angle: 0 };
+
+        async function fetchState() {
+            const { data } = await supabase.from('device_state').select('*').eq('id', 1).single();
+            if (data) {
+                currentState = data;
+                updateControlUI();
+            }
+        }
+
+        function updateControlUI() {
+            const manualDiv = document.getElementById('manualControls');
+            const btnAuto = document.getElementById('btnAuto');
+            const btnManual = document.getElementById('btnManual');
+            if (currentState.is_auto_mode) {
+                manualDiv.classList.add('opacity-50', 'pointer-events-none');
+                btnAuto.className = "px-3 py-1 text-sm bg-green-600 rounded mr-2 border border-green-400";
+                btnManual.className = "px-3 py-1 text-sm bg-gray-600 rounded opacity-50";
+            } else {
+                manualDiv.classList.remove('opacity-50', 'pointer-events-none');
+                btnAuto.className = "px-3 py-1 text-sm bg-gray-600 rounded mr-2 opacity-50";
+                btnManual.className = "px-3 py-1 text-sm bg-red-600 rounded border border-red-400";
+            }
+            document.getElementById('sliderWindow').value = currentState.window_angle;
+            document.getElementById('angleVal').innerText = currentState.window_angle;
+            const btnFan = document.getElementById('btnFan');
+            btnFan.innerText = currentState.fan_on ? "Fan: ON" : "Fan: OFF";
+            btnFan.className = currentState.fan_on ? "flex-1 bg-green-600 rounded text-sm font-bold" : "flex-1 bg-blue-700 rounded text-sm font-bold";
+        }
+        async function updateSupabase(updates) {
+            await supabase.from('device_state').update(updates).eq('id', 1);
+            currentState = { ...currentState, ...updates };
+            updateControlUI();
+        }
+        function setMode(isAuto) { updateSupabase({ is_auto_mode: isAuto }); }
+        function toggleFan() { updateSupabase({ fan_on: !currentState.fan_on }); }
+        function toggleBuzzer() { updateSupabase({ buzzer_on: !currentState.buzzer_on }); }
+        document.getElementById('sliderWindow').addEventListener('change', (e) => updateSupabase({ window_angle: parseInt(e.target.value) }));
+        function speakAlert(msg) {
+            const now = Date.now();
+            if (now - lastSpeakTime > 10000) {
+                let utterance = new SpeechSynthesisUtterance(msg);
+                window.speechSynthesis.speak(utterance);
+                lastSpeakTime = now;
+            }
+        }
+        setInterval(fetchAndAnalyze, 2000);
+        setInterval(fetchState, 2000);
+        fetchAndAnalyze();
+        fetchState();
+
+    </script>
+</body>
+</html>
